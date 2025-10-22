@@ -1,8 +1,6 @@
 # import the necessary packages
-import sys
 import os
 import numpy as np
-import argparse
 import time
 import cv2
 import glob
@@ -198,11 +196,16 @@ DEVICE = detect_device(force_cpu)
 #model = YOLO('yolo11x.pt')  # This will automatically download the model if not present
 model = YOLO('yolo11x.pt')
 
-def analizar(video_path, nombre):
+def analizar(video_path, nombre, output_path: str = None):
     global vs, writer, W, H, frameIndex, counter, line_counts, class_counts, counted_ids_per_line, memory
 
+    # Determine output path (allow caller to override global salida_path)
+    out_base = salida_path
+    if output_path:
+        out_base = output_path if output_path.endswith(os.sep) else output_path + os.sep
+
     # Set input and output paths
-    output = salida_path + nombre + "_analizado.mp4"
+    output = out_base + nombre + "_analizado.mp4"
     
     # Move model to GPU if available
     model.to(DEVICE)
@@ -485,8 +488,8 @@ def analizar(video_path, nombre):
 
     # Save counts to output/counts.txt
     try:
-        os.makedirs(salida_path, exist_ok=True)
-        with open(f'{salida_path}{nombre}_counts.txt', 'w', encoding='utf-8') as f:
+        os.makedirs(out_base, exist_ok=True)
+        with open(f'{out_base}{nombre}_counts.txt', 'w', encoding='utf-8') as f:
             f.write(f"TOTAL_GENERAL:{counter}\n\n")
             
             f.write("TOTALES_POR_CLASE:\n")
@@ -506,7 +509,7 @@ def analizar(video_path, nombre):
         print(f"[WARN] Could not save counts: {e}")
     return {"total": counter, "per_class": class_counts, "per_line": line_counts}
 
-def analizar_con_lineas_predefinidas(video_path, nombre, counting_lines):
+def analizar_con_lineas_predefinidas(video_path, nombre, counting_lines, output_path: str = None):
     """
     Analiza un video usando líneas de conteo predefinidas (sin interfaz interactiva)
     
@@ -520,8 +523,13 @@ def analizar_con_lineas_predefinidas(video_path, nombre, counting_lines):
     """
     global vs, writer, W, H, frameIndex, counter, line_counts, class_counts, counted_ids_per_line, memory
 
+    # Determine output path (allow caller to override global salida_path)
+    out_base = salida_path
+    if output_path:
+        out_base = output_path if output_path.endswith(os.sep) else output_path + os.sep
+
     # Set input and output paths
-    output = salida_path + nombre + "_analizado.mp4"
+    output = out_base + nombre + "_analizado.mp4"
     
     # Move model to GPU if available
     model.to(DEVICE)
@@ -705,9 +713,9 @@ def analizar_con_lineas_predefinidas(video_path, nombre, counting_lines):
         frameIndex += 1
 
         # Optional: limit frames for testing
-        if frameIndex >= 400:
-            print("[INFO] Límite de frames alcanzado (testing)")
-            break
+        #if frameIndex >= 400:
+        #    print("[INFO] Límite de frames alcanzado (testing)")
+        #    break
 
     # Release resources
     if writer is not None:
@@ -716,8 +724,8 @@ def analizar_con_lineas_predefinidas(video_path, nombre, counting_lines):
 
     # Save results
     try:
-        os.makedirs(salida_path, exist_ok=True)
-        with open(f'{salida_path}{nombre}_counts.txt', 'w', encoding='utf-8') as f:
+        os.makedirs(out_base, exist_ok=True)
+        with open(f'{out_base}{nombre}_counts.txt', 'w', encoding='utf-8') as f:
             f.write(f"TOTAL_GENERAL:{counter}\n\n")
             
             f.write("TOTALES_POR_CLASE:\n")

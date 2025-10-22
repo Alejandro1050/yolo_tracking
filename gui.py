@@ -442,8 +442,11 @@ class TrafficCounterGUI:
         
         # Create UI
         self.create_header()
-        self.create_main_content()
+        # Create footer first so it's packed before the expanding main content.
+        # Packing the footer before the main content helps ensure the
+        # footer remains visible when the main content expands.
         self.create_footer()
+        self.create_main_content()
         
     def show_welcome_dialog(self):
         """Show welcome dialog on startup"""
@@ -569,21 +572,24 @@ class TrafficCounterGUI:
     def create_main_content(self):
         """Create main content area"""
         main_frame = ctk.CTkFrame(self.window, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=15, pady=15)
-        
+        # Place main frame at the top and allow it to expand; footer is anchored bottom
+        main_frame.pack(side="top", fill="both", expand=True, padx=15, pady=15)
+
         # Left panel - Configuration
         left_panel = ctk.CTkScrollableFrame(main_frame, width=500)
         left_panel.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        
+
         self.create_video_selection(left_panel)
         self.create_hardware_info(left_panel)
         self.create_detection_settings(left_panel)
         self.create_output_settings(left_panel)
-        
+        # Automation panel (run automatizacion from GUI)
+        self.create_automation_panel(left_panel)
+
         # Right panel - Preview and Progress
         right_panel = ctk.CTkFrame(main_frame)
         right_panel.pack(side="right", fill="both", expand=True)
-        
+
         self.create_preview_area(right_panel)
         self.create_progress_area(right_panel)
         
@@ -874,8 +880,9 @@ class TrafficCounterGUI:
     def create_footer(self):
         """Create footer with action buttons"""
         footer_frame = ctk.CTkFrame(self.window, corner_radius=0, fg_color=("gray75", "gray25"))
-        footer_frame.pack(fill="x", padx=0, pady=0)
-        
+        # Anchor footer to the bottom so buttons remain visible even when main expands
+        footer_frame.pack(side="bottom", fill="x", padx=0, pady=0)
+
         button_container = ctk.CTkFrame(footer_frame, fg_color="transparent")
         button_container.pack(fill="x", padx=15, pady=15)
         
@@ -915,6 +922,143 @@ class TrafficCounterGUI:
             state="disabled"
         )
         self.results_btn.pack(side="left", padx=(10, 0), fill="x", expand=True)
+
+    def create_automation_panel(self, parent):
+        """Panel para ejecutar la automatización desde la GUI"""
+        frame = ctk.CTkFrame(parent)
+        frame.pack(fill="x", padx=10, pady=10)
+
+        label = ctk.CTkLabel(
+            frame,
+            text="🤖 Automatización",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            anchor="w"
+        )
+        label.pack(anchor="w", padx=15, pady=(5, 8))
+
+        # Run automation button
+        self.auto_btn = ctk.CTkButton(
+            frame,
+            text="Iniciar Automatización",
+            command=self.start_automation,
+            fg_color="#1f6feb",
+            hover_color="#1558b0",
+            height=44,
+            font=ctk.CTkFont(size=13, weight="bold")
+        )
+        self.auto_btn.pack(fill="x", padx=15, pady=(0, 8))
+
+        # Input / Output folder selectors for automation
+        folders_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        folders_frame.pack(fill="x", padx=15, pady=(0, 8))
+
+        self.auto_input_folder = tk.StringVar(value=os.path.join(os.path.dirname(__file__), "input"))
+        self.auto_output_folder = tk.StringVar(value=os.path.join(os.path.dirname(__file__), "output"))
+
+        in_btn = ctk.CTkButton(folders_frame, text="Seleccionar carpeta de entrada", command=self._browse_auto_input)
+        in_btn.pack(side="left", expand=True, fill="x", padx=(0, 8))
+        out_btn = ctk.CTkButton(folders_frame, text="Seleccionar carpeta de salida", command=self._browse_auto_output)
+        out_btn.pack(side="left", expand=True, fill="x")
+
+        # Small labels showing selected paths
+        self.auto_paths_label = ctk.CTkLabel(frame, text=f"In: {self.auto_input_folder.get()}  |  Out: {self.auto_output_folder.get()}", font=ctk.CTkFont(size=11), text_color="gray")
+        self.auto_paths_label.pack(anchor="w", padx=15, pady=(0,8))
+
+        # Status / Logs
+        self.auto_status = ctk.CTkLabel(
+            frame,
+            text="Estado: inactivo",
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        self.auto_status.pack(anchor="w", padx=15, pady=(0, 8))
+
+        # Simple log area (read-only)
+        self.auto_log = tk.Text(frame, height=6, wrap="word", state="disabled", bg="#2b2b2b", fg="#e0e0e0")
+        self.auto_log.pack(fill="both", padx=15, pady=(0, 8))
+
+    def start_automation(self):
+        """Start the automation process in a background thread"""
+        # Validate input/output folders and confirm with the user before starting
+        in_path = self.auto_input_folder.get()
+        out_path = self.auto_output_folder.get()
+
+        if not in_path or not os.path.isdir(in_path):
+            messagebox.showerror("Error", "La carpeta de entrada no existe. Por favor selecciona una carpeta válida.")
+            return
+
+        # Find videos in input folder
+        video_list = [f for f in os.listdir(in_path) if f.lower().endswith(('.mp4', '.avi', '.mov', '.mkv'))]
+        if len(video_list) == 0:
+            messagebox.showwarning("No hay videos", "No se encontraron archivos de video en la carpeta de entrada seleccionada.")
+            return
+
+        # Confirm with the user
+        proceed = messagebox.askyesno(
+            "Confirmar Automatización",
+            f"Se encontraron {len(video_list)} video(s) en:\n{in_path}\n\n¿Deseas iniciar la automatización?"
+        )
+        if not proceed:
+            return
+
+        # Ensure output folder exists (try to create)
+        try:
+            if out_path:
+                os.makedirs(out_path, exist_ok=True)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo crear la carpeta de salida: {e}")
+            return
+
+        # Disable button to prevent re-entrancy
+        self.auto_btn.configure(state="disabled")
+        self.auto_status.configure(text="Estado: ejecutando...", text_color="orange")
+        self._append_auto_log("Iniciando automatización...\n")
+
+        def on_progress(msg: str):
+            # Called from automation thread; schedule UI updates on main thread
+            self.window.after(0, lambda: self._append_auto_log(msg + "\n"))
+
+        def worker():
+            try:
+                import automatizacion
+                in_path = self.auto_input_folder.get() or None
+                out_path = self.auto_output_folder.get() or None
+                results = automatizacion.run_automation(videos_path=in_path, output_path=out_path, on_progress=on_progress)
+                self.window.after(0, lambda: self._append_auto_log("Automatización finalizada.\n"))
+            except Exception as e:
+                self.window.after(0, lambda: self._append_auto_log(f"Error: {e}\n"))
+            finally:
+                self.window.after(0, lambda: self._automation_done())
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+
+    def _append_auto_log(self, text: str):
+        self.auto_log.configure(state="normal")
+        self.auto_log.insert("end", text)
+        self.auto_log.see("end")
+        self.auto_log.configure(state="disabled")
+
+    def _automation_done(self):
+        self.auto_status.configure(text="Estado: finalizado", text_color="green")
+        self.auto_btn.configure(state="normal")
+        # Refresh paths label
+        try:
+            self.auto_paths_label.configure(text=f"In: {self.auto_input_folder.get()}  |  Out: {self.auto_output_folder.get()}")
+        except Exception:
+            pass
+
+    def _browse_auto_input(self):
+        folder = filedialog.askdirectory(title="Seleccionar carpeta de entrada para automatización")
+        if folder:
+            self.auto_input_folder.set(folder)
+            self.auto_paths_label.configure(text=f"In: {self.auto_input_folder.get()}  |  Out: {self.auto_output_folder.get()}")
+
+    def _browse_auto_output(self):
+        folder = filedialog.askdirectory(title="Seleccionar carpeta de salida para automatización")
+        if folder:
+            self.auto_output_folder.set(folder)
+            self.auto_paths_label.configure(text=f"In: {self.auto_input_folder.get()}  |  Out: {self.auto_output_folder.get()}")
         
     def browse_video(self):
         """Open file dialog to select video"""
